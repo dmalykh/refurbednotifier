@@ -80,10 +80,13 @@ func (n *Notifier) schedule(ctx context.Context, send chan []byte, queue *list.L
 
 // Send messages from queue
 func (n *Notifier) release(ctx context.Context, queue *list.List, f SendFunc) {
+	var done = make(chan struct{})
 	for {
 		select {
 		case <-ctx.Done():
 			queue.Init()
+			return
+		case <-done:
 			return
 		default:
 			func() {
@@ -94,6 +97,11 @@ func (n *Notifier) release(ctx context.Context, queue *list.List, f SendFunc) {
 				n.lock.Lock()
 				defer func() {
 					queue.Remove(element)
+					if queue.Len() == 0 {
+						go func() {
+							done <- struct{}{}
+						}()
+					}
 					n.lock.Unlock()
 				}()
 				msg, ok := element.Value.([]byte)
